@@ -7,9 +7,14 @@
         </button>
       </div>
       <div class="col-4">
-        <form>
+        <form @submit.prevent="view">
           <div class="input-group">
-            <input type="text" placeholder="search" class="form-control" />
+            <input
+              type="text"
+              v-model="search"
+              placeholder="search"
+              class="form-control"
+            />
             <div class="input-group-append">
               <button type="submit" class="btn btn-primary">
                 <i class="fa-solid fa-magnifying-glass"></i>
@@ -23,20 +28,32 @@
       <div class="col-4">
         <div class="card">
           <h4 class="card-header">
-            {{isEditMode ? 'Edit': 'Create'}}
+            {{ isEditMode ? "Edit" : "Create" }}
           </h4>
           <div class="card-body">
-            <form @submit.prevent="isEditMode? update() : store()">
+            <form @submit.prevent="isEditMode ? update() : store()">
+              <AlertError :form="product" />
               <div class="form-group">
                 <label for="">Name</label>
-                <input v-model="product.name" type="text" class="form-control" />
+                <input
+                  v-model="product.name"
+                  type="text"
+                  class="form-control"
+                />
+                <HasError :form="product" field="name" />
               </div>
               <div class="form-group mb-2">
                 <label for="">Price</label>
-                <input v-model="product.price" type="number" class="form-control" />
+                <input
+                  v-model="product.price"
+                  type="number"
+                  class="form-control"
+                />
+                <HasError :form="product" field="price" />
               </div>
               <button type="submit" class="btn btn-primary">
-                <i class="fa-solid fa-floppy-disk mr-1"></i> {{isEditMode ? 'Update':'Save'}}
+                <i class="fa-solid fa-floppy-disk mr-1"></i>
+                {{ isEditMode ? "Update" : "Save" }}
               </button>
             </form>
           </div>
@@ -53,7 +70,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="product in products" :key="product.id">
+            <tr v-for="product in products.data" :key="product.id">
               <td>{{ product.id }}</td>
               <td>{{ product.name }}</td>
               <td>{{ product.price }}</td>
@@ -61,84 +78,112 @@
                 <button class="btn btn-success btn-sm" @click="edit(product)">
                   <i class="fa-solid fa-pen-to-square"></i>edit
                 </button>
-                <button class="btn btn-danger btn-sm" @click="destroy(product.id)">
+                <button
+                  class="btn btn-danger btn-sm"
+                  @click="destroy(product.id)"
+                >
                   <i class="fa-solid fa-trash-can"></i>delete
                 </button>
               </td>
             </tr>
           </tbody>
         </table>
+        <pagination
+          :data="products"
+          @pagination-change-page="view"
+        ></pagination>
       </div>
     </div>
+    <loading :active="isLoading" :is-full-page="fullPage" />
   </div>
 </template>
 
 <script>
-import axios from "axios";
+import Loading from "vue-loading-overlay";
 
+import axios from "axios";
+import Form from "vform";
+import { Button, HasError, AlertError } from "vform/src/components/bootstrap5";
 export default {
+  components: {
+    Button,
+    HasError,
+    AlertError,
+    Loading,
+  },
   data() {
     return {
-      isEditMode :false,
-      products: [],
-      product:
-        {
-          id:'',
-          name:'',
-          price:''
-        }
-      
+      isEditMode: false,
+      products: {},
+      search: "",
+      product: new Form({
+        id: "",
+        name: "",
+        price: "",
+      }),
+      isLoading: true,
+      fullPage: true,
     };
   },
   methods: {
-    view() {
+    view(page = 1) {
+      this.$Progress.start();
+      this.isLoading = true;
       axios
-        .get("/api/product")
+        .get(`/api/product?page=${page}&search=${this.search}`)
         .then((res) => {
           this.products = res.data;
+          this.$Progress.finish();
+          this.isLoading = false;
         })
         .catch((err) => {
-          console.log(err.message);
+          this.$Progress.fail();
         });
     },
-    store(){
-      axios.post("/api/product",this.product)
-      .then(res=>{
+    store() {
+      this.product.post("/api/product", this.product).then((res) => {
         this.view();
-        this.product.name = '',
-        this.product.price = ''
-      })
+        this.product.reset();
+        Toast.fire({
+          icon: "success",
+          title: "Product created successfully",
+        });
+      });
     },
-    edit(product){
-      this.isEditMode = true,
-      this.product.id = product.id,
-      this.product.name = product.name,
-      this.product.price = product.price
+    edit(product) {
+      (this.isEditMode = true),
+        this.product.fill(product),
+        this.product.clear();
     },
-    create(){
-      this.isEditMode = false,
-      this.product.id = '',
-      this.product.name ='',
-      this.product.price = ''
+    create() {
+      (this.isEditMode = false), this.product.reset(), this.product.clear();
     },
-    update(){
-      axios.put(`/api/product/${this.product.id}`,this.product)
-      .then(res=>{
+    update() {
+      this.product.put(`/api/product/${this.product.id}`).then((res) => {
         this.view();
-        this.product.id = '',
-        this.product.name = '',
-        this.product.price =''
-      })
+        this.product.reset();
+        Toast.fire({
+          icon: "success",
+          title: "Product updated successfully",
+        });
+      });
     },
-    destroy(id){
-      if(!confirm('Are you sure you want to delete?')){
-        return
-      }
-      axios.delete(`/api/product/${id}`)
-      .then(res=>
-        this.view());
-      
-    }
+    destroy(id) {
+      Swal.fire({
+        title: "Are you sure?",
+        text: "You won't be able to revert this!",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#3085d6",
+        cancelButtonColor: "#d33",
+        confirmButtonText: "Yes, delete it!",
+      }).then((result) => {
+        if (result.isConfirmed) {
+          axios.delete(`/api/product/${id}`).then((res) => this.view());
+          Swal.fire("Deleted!", "Your file has been deleted.", "success");
+        }
+      });
+    },
   },
   created() {
     this.view();

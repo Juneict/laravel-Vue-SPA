@@ -9,16 +9,16 @@ use Illuminate\Http\Request;
 
 class ProductControler extends Controller
 {
-
     public function index()
     {
-        return Product::orderBy('id','DESC')->get();
+        
+       return Product::when(request('search'),function($query){
+            $query->where('name','like','%' .request('search').'%');})->orderBy('id','DESC')->paginate(5);
+        
     }
-
 
     public function store(ProductStoreRequest $request)
     {
-
         $product = Product::create($request->only('name', 'price'));
         return $product;
     }
@@ -30,11 +30,9 @@ class ProductControler extends Controller
 
     public function update(ProductUpdateRequest $request, Product $product)
     {
-
         $product->update($request->only('name', 'price'));
         return $product;
     }
-
 
     public function destroy(Product $product)
     {
